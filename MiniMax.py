@@ -1,5 +1,6 @@
-# ==================== minimax.py ====================
 import random
+import NeuralNetwork as nn
+import MiniMax as mm
 
 class MinimaxPlayer:
     """
