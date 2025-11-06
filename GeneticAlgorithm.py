@@ -1,4 +1,6 @@
-# ==================== genetic_algorithm.py ====================
+import NeuralNetwork as nn
+import MiniMax as mm
+
 class GeneticAlgorithm:
     """
     Algoritmo Genético para evolução dos pesos da rede neural
