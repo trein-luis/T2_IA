@@ -1,11 +1,10 @@
-# ==================== app.py ====================
+# ==================== App.py (VERSÃO CORRIGIDA) ====================
 from flask import Flask, render_template, jsonify, request, session
 from flask_cors import CORS
 import json
 import secrets
 
 # Importa os módulos criados anteriormente
-# (Assumindo que estão no mesmo diretório ou instalados)
 from NeuralNetwork import NeuralNetwork
 from Game import TicTacToe
 from MiniMax import MinimaxPlayer
@@ -145,6 +144,24 @@ def train_generation():
     if not session_id or session_id not in training_sessions:
         return jsonify({'error': 'No training session'}), 400
     
+    # Verifica se o treinamento foi pausado/parado
+    if not training_sessions[session_id]['is_training']:
+        ga = training_sessions[session_id]['ga']
+        best_nn = ga.get_best_network()
+        
+        return jsonify({
+            'completed': True,
+            'stopped': True,
+            'generation': ga.generation,
+            'best_fitness': float(ga.best_fitness_history[-1]) if ga.best_fitness_history else 0,
+            'avg_fitness': float(ga.avg_fitness_history[-1]) if ga.avg_fitness_history else 0,
+            'weights': best_nn.export_weights(),
+            'history': {
+                'best': ga.best_fitness_history,
+                'avg': ga.avg_fitness_history
+            }
+        })
+    
     ga = training_sessions[session_id]['ga']
     
     if ga.generation >= CONFIG['max_generations'] or ga.convergence_counter >= 10:
@@ -153,6 +170,7 @@ def train_generation():
         
         return jsonify({
             'completed': True,
+            'stopped': False,
             'generation': ga.generation,
             'best_fitness': float(ga.best_fitness_history[-1]) if ga.best_fitness_history else 0,
             'avg_fitness': float(ga.avg_fitness_history[-1]) if ga.avg_fitness_history else 0,
@@ -199,8 +217,8 @@ def stop_training():
     session_id = session.get('session_id')
     
     if session_id and session_id in training_sessions:
-        ga = training_sessions[session_id]['ga']
         training_sessions[session_id]['is_training'] = False
+        ga = training_sessions[session_id]['ga']
         
         best_nn = ga.get_best_network()
         
@@ -213,4 +231,6 @@ def stop_training():
     return jsonify({'error': 'No training session'}), 400
 
 if __name__ == '__main__':
+    print("🚀 Servidor iniciando...")
+    print("📡 Acesse: http://localhost:5001")
     app.run(debug=True, host='0.0.0.0', port=5001)

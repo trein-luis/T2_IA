@@ -296,12 +296,6 @@
                 <button class="btn btn-success" onclick="startTraining()" id="btnTrain">
                     <span>🧠</span> Treinar Rede Neural
                 </button>
-                <button class="btn btn-warning" onclick="pauseTraining()" id="btnPause" style="display:none;">
-                    <span>⏸️</span> Pausar Treinamento
-                </button>
-                <button class="btn btn-warning" onclick="resumeTraining()" id="btnResume" style="display:none;">
-                    <span>▶️</span> Retomar Treinamento
-                </button>
                 <button class="btn btn-danger" onclick="stopTraining()" id="btnStop" style="display:none;">
                     <span>⏹️</span> Parar Treinamento
                 </button>
@@ -399,12 +393,10 @@
             gameOver: false,
             mode: null,
             trainedWeights: null,
-            isTraining: false,
-            isPaused: false
+            isTraining: false
         };
 
         let chart = null;
-        let trainingInterval = null;
 
         // Inicializa o tabuleiro
         function initBoard() {
@@ -630,13 +622,12 @@
                 document.getElementById('btnTrain').disabled = true;
                 document.getElementById('btnMinimax').disabled = true;
                 document.getElementById('btnNN').disabled = true;
-                document.getElementById('btnPause').style.display = 'block';
                 document.getElementById('btnStop').style.display = 'block';
                 document.getElementById('progressContainer').style.display = 'block';
                 
                 gameState.isTraining = true;
                 gameState.mode = null;
-                updateStatus('Treinamento em andamento...');
+                updateStatus('Iniciando treinamento...');
 
                 // Limpa gráfico
                 chart.data.labels = [];
@@ -650,86 +641,74 @@
                 });
 
                 await response.json();
+                updateStatus('Treinamento em andamento...');
                 
-                // Inicia loop de treinamento
-                runTraining();
+                // Inicia loop de treinamento AUTOMATICAMENTE
+                runTrainingLoop();
             } catch (error) {
                 console.error('Erro ao iniciar treinamento:', error);
                 resetTrainingUI();
             }
         }
 
-        // Loop de treinamento
-        async function runTraining() {
-            trainingInterval = setInterval(async () => {
-                if (!gameState.isTraining || gameState.isPaused) return;
+        // Loop AUTOMÁTICO de treinamento
+        async function runTrainingLoop() {
+            if (!gameState.isTraining) {
+                return;
+            }
 
-                try {
-                    const response = await fetch('/api/train_generation', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
+            try {
+                const response = await fetch('/api/train_generation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
 
-                    const data = await response.json();
-                    
-                    // Atualiza estatísticas
-                    document.getElementById('generation').textContent = data.generation;
-                    document.getElementById('bestFitness').textContent = data.best_fitness.toFixed(2);
-                    document.getElementById('avgFitness').textContent = data.avg_fitness.toFixed(2);
-                    
-                    // Atualiza progresso
-                    const progress = (data.generation / 500) * 100;
-                    document.getElementById('progressBar').style.width = `${progress}%`;
-                    document.getElementById('progressText').textContent = `${data.generation} / 500`;
+                const data = await response.json();
+                
+                // Atualiza estatísticas
+                document.getElementById('generation').textContent = data.generation;
+                document.getElementById('bestFitness').textContent = data.best_fitness.toFixed(2);
+                document.getElementById('avgFitness').textContent = data.avg_fitness.toFixed(2);
+                
+                // Atualiza progresso
+                const progress = (data.generation / 500) * 100;
+                document.getElementById('progressBar').style.width = `${progress}%`;
+                document.getElementById('progressText').textContent = `${data.generation} / 500`;
 
-                    // Atualiza gráfico
-                    chart.data.labels.push(data.generation);
-                    chart.data.datasets[0].data.push(data.best_fitness);
-                    chart.data.datasets[1].data.push(data.avg_fitness);
-                    
-                    if (chart.data.labels.length > 50) {
-                        chart.data.labels.shift();
-                        chart.data.datasets[0].data.shift();
-                        chart.data.datasets[1].data.shift();
-                    }
-                    
+                // Atualiza gráfico
+                if (data.history && data.history.best) {
+                    chart.data.labels = data.history.best.map((_, i) => i + 1);
+                    chart.data.datasets[0].data = data.history.best;
+                    chart.data.datasets[1].data = data.history.avg;
                     chart.update('none');
-
-                    if (data.completed) {
-                        clearInterval(trainingInterval);
-                        gameState.trainedWeights = data.weights;
-                        updateStatus(`Treinamento concluído! ${data.generation} gerações`);
-                        resetTrainingUI();
-                        document.getElementById('btnNN').disabled = false;
-                        document.getElementById('btnDownload').disabled = false;
-                    }
-                } catch (error) {
-                    console.error('Erro durante treinamento:', error);
-                    clearInterval(trainingInterval);
-                    resetTrainingUI();
                 }
-            }, 100);
-        }
 
-        // Pausa treinamento
-        function pauseTraining() {
-            gameState.isPaused = true;
-            document.getElementById('btnPause').style.display = 'none';
-            document.getElementById('btnResume').style.display = 'block';
-            updateStatus('Treinamento pausado');
-        }
-
-        // Retoma treinamento
-        function resumeTraining() {
-            gameState.isPaused = false;
-            document.getElementById('btnPause').style.display = 'block';
-            document.getElementById('btnResume').style.display = 'none';
-            updateStatus('Treinamento em andamento...');
+                if (data.completed) {
+                    gameState.trainedWeights = data.weights;
+                    gameState.isTraining = false;
+                    
+                    if (data.stopped) {
+                        updateStatus(`Treinamento interrompido na geração ${data.generation}`);
+                    } else {
+                        updateStatus(`✅ Treinamento concluído! ${data.generation} gerações`);
+                    }
+                    
+                    resetTrainingUI();
+                    document.getElementById('btnNN').disabled = false;
+                    document.getElementById('btnDownload').disabled = false;
+                } else {
+                    // CONTINUA AUTOMATICAMENTE - chama novamente após 10ms
+                    setTimeout(runTrainingLoop, 10);
+                }
+            } catch (error) {
+                console.error('Erro durante treinamento:', error);
+                gameState.isTraining = false;
+                resetTrainingUI();
+            }
         }
 
         // Para treinamento
         async function stopTraining() {
-            clearInterval(trainingInterval);
             gameState.isTraining = false;
             
             try {
@@ -756,11 +735,8 @@
         // Reseta UI de treinamento
         function resetTrainingUI() {
             gameState.isTraining = false;
-            gameState.isPaused = false;
             document.getElementById('btnTrain').disabled = false;
             document.getElementById('btnMinimax').disabled = false;
-            document.getElementById('btnPause').style.display = 'none';
-            document.getElementById('btnResume').style.display = 'none';
             document.getElementById('btnStop').style.display = 'none';
         }
 
